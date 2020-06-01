@@ -63,9 +63,8 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
 
         // construct requested URL
         $base  = hsc($data[0]);
-		msg('vvvvv');
         $title = ($data[1] ? hsc($data[1]) : $base);
-		msg($title);
+	//	msg($title);
         $path  = hsc($_REQUEST['repo']);
 		//msg(print_r($_REQUEST,1));
         $url   = $base.$path;
@@ -106,13 +105,13 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
 
         $cache = getCacheName($url.$path, '.repo');
         $mtime = @filemtime($cache); // 0 if it doesn't exist
-		msg($mtime);
+	//	msg($mtime);
 $mtime = 0;
         if (($mtime != 0) && !$_REQUEST['purge'] && ($mtime > time() - $refresh)) {
             $idx = io_readFile($cache, false);
             if ($conf['allowdebug']) $idx .= "\n<!-- cachefile $cache used -->\n";
         } else {
-			msg($url,2);        
+		//	msg($url,2);        
             $items = $this->_index($url, $path);		
 		  //  msg('here ' .htmlentities( print_r($items,1)));
 			 $renderer->doc .= $items;
@@ -138,8 +137,10 @@ $mtime = 0;
 		
 		$data = preg_replace_callback(
         '|^.*?(<table.*?<\/table>).*?<\/body>\s*<\/html>|ms',
-        function ($matches) {			
-			return $matches[1];			
+        function ($matches) {
+           $matches[1] = preg_replace(' /<tr class="warning include-fragment-error">.*?<\/tr>/ms',"",$matches[1] ); 		
+           $matches[1] = preg_replace(' /<img .*?spinner-32.gif"\s*\/>/ms',"",$matches[1] ); 		          
+           return $matches[1];			
         },
         $data
         );
