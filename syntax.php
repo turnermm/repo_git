@@ -62,7 +62,8 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
      * Create output
      */
     function render($mode, Doku_Renderer $renderer, $data) {
-
+        global $INPUT;
+        msg(print_r($_REQUEST,1));
         // construct requested URL
         $base  = hsc($data[0]);
         $title = ($data[1] ? hsc($data[1]) : $base);
@@ -157,25 +158,25 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
             $data = preg_replace_callback(
                 '#href\s*=\s*("|\')(.*?)\1#ms',
                 function ($matches) {
-                    global $ID;
-                    $link = wl($ID);
-                    // return 'href=' . $matches[1] . $link . $matches[1] . "'";
-                     if(strpos($matches[2],'tree')){
+                    global $ID,$conf;
+                    if($conf['userewrite']) {
+                        $connector = "?";            
+                    }
+                    else {
+                        $connector = "&amp;";
+                    }    
+                   
+                    $link = wl($ID);                   
+                     if(strpos($matches[2],'tree')|| strpos($matches[2],'commit')){
                          $matches[2].='/';
-                       //  msg($matches[2]);
-                       //  return $matches[2];
                      }
-                     else if(strpos($matches[2],'blob')){                         
-                         $matches[2]= 'href=' . $matches[1] . $link . $matches[1] .  
-                         '&linkback="' . urlencode($matches[2]) . '"';
-                        // msg($matches[2],1);
-                         return ($matches[2]);
-                     }
-                     else {
-                         return $matches[0];
-                     }
-                    $matches[2]= 'href=' . $matches[1] . $link . //$matches[1] .  
-                         '&linkback=' . urlencode($matches[2]) . '"';
+                     else if(strpos($matches[2],'blob')=== false){
+                         msg($matches[0]);
+                        return $matches[0];
+                     }   
+                     
+                    $matches[2]= 'href=' . $matches[1] . $link . $connector .
+                         'linkback=' . urlencode($matches[2]) . '"';                     
                     return $matches[2];
                 },
                 $data
