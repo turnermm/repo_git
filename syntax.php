@@ -28,6 +28,8 @@ require_once(DOKU_PLUGIN.'syntax.php');
  * need to inherit from this class
  */
 class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
+	private $github;
+
     function getType() { return 'substition'; }
     function getSort() { return 301; }
     function getPType() { return 'block'; }
@@ -64,11 +66,10 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
         // construct requested URL
         $base  = hsc($data[0]);
         $title = ($data[1] ? hsc($data[1]) : $base);
-	//	msg($title);
         $path  = hsc($_REQUEST['repo']);
-		//msg(print_r($_REQUEST,1));
         $url   = $base.$path;
-
+        $this->github = strpos($url,'github') != false ? $url : false;
+		
         if ($mode == 'xhtml') {
 
             // prevent caching to ensure the included page is always fresh
@@ -78,7 +79,6 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
             $renderer->header($title.$path, 5, $data[2]);
             $renderer->section_open(5);
             if ($url{strlen($url) - 1} == '/') {                 // directory
-			
                 $this->_directory($base, $renderer, $path, $data[3]);
             } elseif (preg_match('/(jpe?g|gif|png)$/i', $url)) { // image
                 $this->_image($url, $renderer);
@@ -104,22 +104,29 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
 
 
         $cache = getCacheName($url.$path, '.repo');
+	//	msg($cache);
         $mtime = @filemtime($cache); // 0 if it doesn't exist
-	//	msg($mtime);
-$mtime = 0;
+		
+
+//$mtime = 0;
         if (($mtime != 0) && !$_REQUEST['purge'] && ($mtime > time() - $refresh)) {
             $idx = io_readFile($cache, false);
             if ($conf['allowdebug']) $idx .= "\n<!-- cachefile $cache used -->\n";
-        } else {
-		//	msg($url,2);        
-            $items = $this->_index($url, $path);		
-		  //  msg('here ' .htmlentities( print_r($items,1)));
-			 $renderer->doc .= $items;
-            $idx = html_buildlist($items, 'idx', 'repo_list_index', 'html_li_index');
-
-            io_saveFile($cache, $idx);
-            if ($conf['allowdebug']) $idx .= "\n<!-- no cachefile used, but created -->\n";
-        }
+            $renderer->doc .= $idx;
+            return;
+        } else if($this->github) {
+			//msg($url,2);        
+            $items = $this->_index($url, $path);
+		   // msg('here ' .htmlentities( print_r($items,1)));              
+			$renderer->doc .= $items;
+            io_saveFile($cache, $items);
+            return;
+        } 
+        
+		$items = $this->_index($url, $path);	
+        $idx = html_buildlist($items, 'idx', 'repo_list_index', 'html_li_index');
+        io_saveFile($cache, $idx);
+        if ($conf['allowdebug']) $idx .= "\n<!-- no cachefile used, but created -->\n";  
 
         $renderer->doc .= $idx;
     }
@@ -132,23 +139,50 @@ $mtime = 0;
         // download the index html file
         $http = new DokuHTTPClient();
         $http->timeout = 25; //max. 25 sec
-		////msg("u+b: =" .$url.$base);
         $data = $http->get($url.$base);
-		
-		$data = preg_replace_callback(
-        '|^.*?(<table.*?<\/table>).*?<\/body>\s*<\/html>|ms',
-        function ($matches) {
-           $matches[1] = preg_replace(' /<tr class="warning include-fragment-error">.*?<\/tr>/ms',"",$matches[1] ); 		
-           $matches[1] = preg_replace(' /<img .*?spinner-32.gif"\s*\/>/ms',"",$matches[1] ); 		          
-           return $matches[1];			
-        },
-        $data
-        );
-		return $data;
-	//msg($data);	
-	//msg(print_r($data,1));
-	//msg(htmlentities('data='.print_r($data,1))); 
-	return "";
+        if($this->github) {     
+            $data = preg_replace_callback(
+                '|^.*?(<table.*?<\/table>).*?<\/body>\s*<\/html>|ms',
+                function ($matches) {                 
+                   $gitpath = preg_replace("/https?:\/\/github.com/","",$this->github);                 
+                   $repl = "https://github.com" . $gitpath;                  
+                   $matches[1] = str_replace($gitpath, $repl, $matches[1]);
+                   $matches[1] = preg_replace(' /<tr class="warning include-fragment-error">.*?<\/tr>/ms',"",$matches[1] );         
+                   $matches[1] = preg_replace(' /<img .*?spinner-32.gif"\s*\/>/ms',"",$matches[1] );                   
+                   return $matches[1];            
+                },
+                $data
+            );
+          
+            $data = preg_replace_callback(
+                '#href\s*=\s*("|\')(.*?)\1#ms',
+                function ($matches) {
+                    global $ID;
+                    $link = wl($ID);
+                    // return 'href=' . $matches[1] . $link . $matches[1] . "'";
+                     if(strpos($matches[2],'tree')){
+                         $matches[2].='/';
+                       //  msg($matches[2]);
+                       //  return $matches[2];
+                     }
+                     else if(strpos($matches[2],'blob')){                         
+                         $matches[2]= 'href=' . $matches[1] . $link . $matches[1] .  
+                         '&linkback="' . urlencode($matches[2]) . '"';
+                        // msg($matches[2],1);
+                         return ($matches[2]);
+                     }
+                     else {
+                         return $matches[0];
+                     }
+                    $matches[2]= 'href=' . $matches[1] . $link . //$matches[1] .  
+                         '&linkback=' . urlencode($matches[2]) . '"';
+                    return $matches[2];
+                },
+                $data
+            );
+            return $data;
+        }
+    
         preg_match_all('/<li><a href="(.*?)">/i', $data, $results);
 
         $lvl++;
