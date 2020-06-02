@@ -1,7 +1,7 @@
 base   repo
-author Esther Brunner
-email  wikidesign@gmail.com
-date   2012-06-24
+author Myron Turner
+email  turnermm02@shaw.cam
+date   2020-06-02
 name   Repository Plugin
-desc   Show files from a remote repository with GesHi syntax highlighting
+desc   Show and displays files and directories from a github, and possible other, repository with GesHi syntax highlighting
 url    http://www.dokuwiki.org/plugin:repo
