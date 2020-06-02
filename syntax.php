@@ -28,6 +28,9 @@ require_once(DOKU_PLUGIN.'syntax.php');
  * need to inherit from this class
  */
 class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
+    private $github;
+    private $_debug = false;
+    
     function getType() { return 'substition'; }
     function getSort() { return 301; }
     function getPType() { return 'block'; }
@@ -39,7 +42,7 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
      * Handle the match
      */
     function handle($match, $state, $pos, Doku_Handler $handler) {
-
+        // $this->debug = true;
         $match = substr($match, 7, -2);
         list($base, $title) = explode('|', $match, 2);
         list($base, $refresh) = explode(' ', $base, 2);
@@ -60,14 +63,24 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
      * Create output
      */
     function render($mode, Doku_Renderer $renderer, $data) {
+        global $ID;
+        if($this->debug) {
+            msg(print_r($_REQUEST,1));
+        }
 
-        // construct requested URL
-        $base  = hsc($data[0]);
+        if(isset($_REQUEST['linkback'])) {
+            $base = hsc($_REQUEST['linkback']);
+       }           
+       else {
+           $base  = hsc($data[0]);
+        }
+        if($ths->debug) {
+            msg($base);
+        }
         $title = ($data[1] ? hsc($data[1]) : $base);
-	//	msg($title);
         $path  = hsc($_REQUEST['repo']);
-		//msg(print_r($_REQUEST,1));
         $url   = $base.$path;
+        $this->github = strpos($url,'github') != false ? $url : false;
 
         if ($mode == 'xhtml') {
 
@@ -78,7 +91,6 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
             $renderer->header($title.$path, 5, $data[2]);
             $renderer->section_open(5);
             if ($url{strlen($url) - 1} == '/') {                 // directory
-			
                 $this->_directory($base, $renderer, $path, $data[3]);
             } elseif (preg_match('/(jpe?g|gif|png)$/i', $url)) { // image
                 $this->_image($url, $renderer);
@@ -102,24 +114,27 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
     function _directory($url, &$renderer, $path, $refresh) {
         global $conf;
 
-
-        $cache = getCacheName($url.$path, '.repo');
-        $mtime = @filemtime($cache); // 0 if it doesn't exist
-	//	msg($mtime);
-$mtime = 0;
+        $cache = getCacheName($url.$path, '.repo');    
+        $mtime = @filemtime($cache); // 0 if it doesn't exist        
+        if($this->debug) { 
+            $mtime = 0;
+        }
         if (($mtime != 0) && !$_REQUEST['purge'] && ($mtime > time() - $refresh)) {
             $idx = io_readFile($cache, false);
             if ($conf['allowdebug']) $idx .= "\n<!-- cachefile $cache used -->\n";
-        } else {
-		//	msg($url,2);        
-            $items = $this->_index($url, $path);		
-		  //  msg('here ' .htmlentities( print_r($items,1)));
-			 $renderer->doc .= $items;
-            $idx = html_buildlist($items, 'idx', 'repo_list_index', 'html_li_index');
-
-            io_saveFile($cache, $idx);
-            if ($conf['allowdebug']) $idx .= "\n<!-- no cachefile used, but created -->\n";
-        }
+            $renderer->doc .= $idx;
+            return;
+        } else if($this->github) {    
+            $items = $this->_index($url, $path);
+            $renderer->doc .= $items;
+            io_saveFile($cache, $items);
+            return;
+        } 
+        
+        $items = $this->_index($url, $path);    
+        $idx = html_buildlist($items, 'idx', 'repo_list_index', 'html_li_index');
+        io_saveFile($cache, $idx);
+        if ($conf['allowdebug']) $idx .= "\n<!-- no cachefile used, but created -->\n";  
 
         $renderer->doc .= $idx;
     }
@@ -132,23 +147,51 @@ $mtime = 0;
         // download the index html file
         $http = new DokuHTTPClient();
         $http->timeout = 25; //max. 25 sec
-		////msg("u+b: =" .$url.$base);
         $data = $http->get($url.$base);
-		
-		$data = preg_replace_callback(
-        '|^.*?(<table.*?<\/table>).*?<\/body>\s*<\/html>|ms',
-        function ($matches) {
-           $matches[1] = preg_replace(' /<tr class="warning include-fragment-error">.*?<\/tr>/ms',"",$matches[1] ); 		
-           $matches[1] = preg_replace(' /<img .*?spinner-32.gif"\s*\/>/ms',"",$matches[1] ); 		          
-           return $matches[1];			
-        },
-        $data
-        );
-		return $data;
-	//msg($data);	
-	//msg(print_r($data,1));
-	//msg(htmlentities('data='.print_r($data,1))); 
-	return "";
+        if($this->github) {     
+            $data = preg_replace_callback(
+                '|^.*?(<table.*?<\/table>).*?<\/body>\s*<\/html>|ms',
+                function ($matches) {                 
+                   $gitpath = preg_replace("/https?:\/\/github.com/","",$this->github);                 
+                   $repl = "https://github.com" . $gitpath;                  
+                   $matches[1] = str_replace($gitpath, $repl, $matches[1]);
+                   $matches[1] = preg_replace(' /<tr class="warning include-fragment-error">.*?<\/tr>/ms',"",$matches[1] );         
+                   $matches[1] = preg_replace(' /<img .*?spinner-32.gif"\s*\/>/ms',"",$matches[1] );                   
+                   return $matches[1];            
+                },
+                $data
+            );
+          
+            $data = preg_replace_callback(
+                '#href\s*=\s*("|\')(.*?)\1#ms',
+                function ($matches) {
+                    global $ID,$conf;
+                    if($conf['userewrite']) {
+                        $connector = "?";            
+                    }
+                    else {
+                        $connector = "&amp;";
+                    }                       
+                    $link = wl($ID);                   
+                    if(strpos($matches[2],'tree')|| strpos($matches[2],'commit')){
+                         $matches[2].='/';
+                    }
+                     else if(strpos($matches[2],'blob') !== false){
+                       $matches[2] = str_replace('https://github.com','https://raw.githubusercontent.com',$matches[2]);
+                       $matches[2] = str_replace('blob/',"",$matches[2]);
+                     }   
+                     else {
+                        return $matches[0];      
+                     }
+                    $matches[2]= 'href=' . $matches[1] . $link . $connector .
+                         'linkback=' . urlencode($matches[2]) . '"';                     
+                    return $matches[2];
+                },
+                $data
+            );
+            return $data;
+        }
+    
         preg_match_all('/<li><a href="(.*?)">/i', $data, $results);
 
         $lvl++;
@@ -183,13 +226,18 @@ $mtime = 0;
      * Handle remote source code files: display as code box with link to file at the end
      */
     function _codefile($url, &$renderer, $refresh) {
-
+       global $ID;
         // output the code box with syntax highlighting
         $renderer->doc .= $this->_cached_geshi($url, $refresh);
 
         // and show a link to the original file
         $renderer->p_open();
-        $renderer->externallink($url);
+        $link = DOKU_URL . wl($ID);
+        $class = 'wikilink1';
+        $title = "Back to: $ID";
+        $link =  '<b><a href="'.wl($ID).'" class="'.$class.'">'.$title.'</a></b>';
+      //  $renderer->externallink($link);
+      $renderer->doc .= $link;
         $renderer->p_close();
     }
 
