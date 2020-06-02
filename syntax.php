@@ -62,10 +62,16 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
      * Create output
      */
     function render($mode, Doku_Renderer $renderer, $data) {
-        global $INPUT;
-        msg(print_r($_REQUEST,1));
-        // construct requested URL
-        $base  = hsc($data[0]);
+        global $ID;
+       //  msg(print_r($_REQUEST,1));            
+
+        if(isset($_REQUEST['linkback'])) {
+           $base = hsc($_REQUEST['linkback']);
+       }           
+       else {
+           $base  = hsc($data[0]);
+        }
+     //   msg($base);
         $title = ($data[1] ? hsc($data[1]) : $base);
         $path  = hsc($_REQUEST['repo']);
         $url   = $base.$path;
@@ -103,22 +109,18 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
     function _directory($url, &$renderer, $path, $refresh) {
         global $conf;
 
-
         $cache = getCacheName($url.$path, '.repo');
 	//	msg($cache);
-        $mtime = @filemtime($cache); // 0 if it doesn't exist
-		
+        $mtime = @filemtime($cache); // 0 if it doesn't exist		
 
-//$mtime = 0;
+      //  $mtime = 0;
         if (($mtime != 0) && !$_REQUEST['purge'] && ($mtime > time() - $refresh)) {
             $idx = io_readFile($cache, false);
             if ($conf['allowdebug']) $idx .= "\n<!-- cachefile $cache used -->\n";
             $renderer->doc .= $idx;
             return;
-        } else if($this->github) {
-			//msg($url,2);        
-            $items = $this->_index($url, $path);
-		   // msg('here ' .htmlentities( print_r($items,1)));              
+        } else if($this->github) {	    
+            $items = $this->_index($url, $path);		             
 			$renderer->doc .= $items;
             io_saveFile($cache, $items);
             return;
@@ -164,17 +166,20 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
                     }
                     else {
                         $connector = "&amp;";
-                    }    
-                   
+                    }                       
                     $link = wl($ID);                   
-                     if(strpos($matches[2],'tree')|| strpos($matches[2],'commit')){
+                    if(strpos($matches[2],'tree')|| strpos($matches[2],'commit')){
                          $matches[2].='/';
-                     }
-                     else if(strpos($matches[2],'blob')=== false){
-                         msg($matches[0]);
-                        return $matches[0];
+                    }
+                     else if(strpos($matches[2],'blob') !== false){
+                        // msg()
+                       $matches[2] = str_replace('https://github.com','https://raw.githubusercontent.com',$matches[2]);
+                        $matches[2] = str_replace('blob/',"",$matches[2]);
+                      //   msg($matches[2]);                  
                      }   
-                     
+                     else {
+                        return $matches[0];      
+                     }
                     $matches[2]= 'href=' . $matches[1] . $link . $connector .
                          'linkback=' . urlencode($matches[2]) . '"';                     
                     return $matches[2];
@@ -218,13 +223,18 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
      * Handle remote source code files: display as code box with link to file at the end
      */
     function _codefile($url, &$renderer, $refresh) {
-
+       global $ID;
         // output the code box with syntax highlighting
         $renderer->doc .= $this->_cached_geshi($url, $refresh);
 
         // and show a link to the original file
         $renderer->p_open();
-        $renderer->externallink($url);
+        $link = DOKU_URL . wl($ID);
+        $class = 'wikilink1';
+        $title = "Back to: $ID";
+        $link =  '<b><a href="'.wl($ID).'" class="'.$class.'">'.$title.'</a></b>';
+      //  $renderer->externallink($link);
+      $renderer->doc .= $link;
         $renderer->p_close();
     }
 
