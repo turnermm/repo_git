@@ -28,8 +28,9 @@ require_once(DOKU_PLUGIN.'syntax.php');
  * need to inherit from this class
  */
 class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
-	private $github;
-
+    private $github;
+    private $_debug = false;
+    
     function getType() { return 'substition'; }
     function getSort() { return 301; }
     function getPType() { return 'block'; }
@@ -41,7 +42,7 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
      * Handle the match
      */
     function handle($match, $state, $pos, Doku_Handler $handler) {
-
+        // $this->debug = true;
         $match = substr($match, 7, -2);
         list($base, $title) = explode('|', $match, 2);
         list($base, $refresh) = explode(' ', $base, 2);
@@ -63,20 +64,24 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
      */
     function render($mode, Doku_Renderer $renderer, $data) {
         global $ID;
-       //  msg(print_r($_REQUEST,1));            
+        if($this->debug) {
+            msg(print_r($_REQUEST,1));
+        }
 
         if(isset($_REQUEST['linkback'])) {
-           $base = hsc($_REQUEST['linkback']);
+            $base = hsc($_REQUEST['linkback']);
        }           
        else {
            $base  = hsc($data[0]);
         }
-     //   msg($base);
+        if($ths->debug) {
+            msg($base);
+        }
         $title = ($data[1] ? hsc($data[1]) : $base);
         $path  = hsc($_REQUEST['repo']);
         $url   = $base.$path;
         $this->github = strpos($url,'github') != false ? $url : false;
-		
+
         if ($mode == 'xhtml') {
 
             // prevent caching to ensure the included page is always fresh
@@ -109,24 +114,24 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
     function _directory($url, &$renderer, $path, $refresh) {
         global $conf;
 
-        $cache = getCacheName($url.$path, '.repo');
-	//	msg($cache);
-        $mtime = @filemtime($cache); // 0 if it doesn't exist		
-
-      //  $mtime = 0;
+        $cache = getCacheName($url.$path, '.repo');    
+        $mtime = @filemtime($cache); // 0 if it doesn't exist        
+        if($this->debug) { 
+            $mtime = 0;
+        }
         if (($mtime != 0) && !$_REQUEST['purge'] && ($mtime > time() - $refresh)) {
             $idx = io_readFile($cache, false);
             if ($conf['allowdebug']) $idx .= "\n<!-- cachefile $cache used -->\n";
             $renderer->doc .= $idx;
             return;
-        } else if($this->github) {	    
-            $items = $this->_index($url, $path);		             
-			$renderer->doc .= $items;
+        } else if($this->github) {    
+            $items = $this->_index($url, $path);
+            $renderer->doc .= $items;
             io_saveFile($cache, $items);
             return;
         } 
         
-		$items = $this->_index($url, $path);	
+        $items = $this->_index($url, $path);    
         $idx = html_buildlist($items, 'idx', 'repo_list_index', 'html_li_index');
         io_saveFile($cache, $idx);
         if ($conf['allowdebug']) $idx .= "\n<!-- no cachefile used, but created -->\n";  
@@ -172,10 +177,8 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
                          $matches[2].='/';
                     }
                      else if(strpos($matches[2],'blob') !== false){
-                        // msg()
                        $matches[2] = str_replace('https://github.com','https://raw.githubusercontent.com',$matches[2]);
-                        $matches[2] = str_replace('blob/',"",$matches[2]);
-                      //   msg($matches[2]);                  
+                       $matches[2] = str_replace('blob/',"",$matches[2]);
                      }   
                      else {
                         return $matches[0];      
