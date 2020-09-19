@@ -85,7 +85,8 @@ class syntax_plugin_repo extends DokuWiki_Syntax_Plugin {
         if ($mode == 'xhtml') {
 
             // prevent caching to ensure the included page is always fresh
-            $renderer->info['cache'] = false;
+            //$renderer->info['cache'] = false;
+            $renderer->nocache();
 
             // output
             $renderer->header($title.$path, 5, $data[2]);
